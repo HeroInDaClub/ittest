@@ -1,19 +1,20 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Тест по ИТ</title>
 <style>
 body { font-family: Arial; max-width: 800px; margin: 20px auto; line-height: 1.6 }
 .question { margin-bottom: 20px; }
-.answers label { display: block; }
-button { padding: 8px 16px; margin-top: 10px }
+.answers label { display: block; margin: 3px 0; }
+button { padding: 8px 16px; margin-top: 10px; }
+#result { font-weight: bold; margin-top: 15px; }
 </style>
 </head>
 <body>
 
 <h2>Тест по ИТ</h2>
-<div id="quiz"></div>
+<div id="quiz">Загрузка вопросов...</div>
 <button id="check">Проверить</button>
 <p id="result"></p>
 
@@ -22,39 +23,44 @@ async function loadQuestions() {
   try {
     const response = await fetch('questions.txt');
     if (!response.ok) throw new Error('HTTP ' + response.status);
-
     const text = await response.text();
     return parseQuestions(text);
   } catch (e) {
-    document.getElementById('quiz').innerText =
-      'Не удалось загрузить questions.txt';
+    document.getElementById('quiz').innerText = 'Не удалось загрузить questions.txt';
     console.error(e);
     return [];
   }
 }
 
 function parseQuestions(text) {
-  const blocks = text.trim().split(/\n\s*\n/);   // делим по пустым строкам
   const questions = [];
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l !== '');
 
-  for (const block of blocks) {
-    const lines = block.trim().split('\n').filter(l => l.trim() !== '');
+  let current = null;
 
-    const questionText = lines[0].replace(/^\d+\.\s*/, '').trim();
-    const answers = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('-')) {
-        answers.push({ text: line.slice(1).trim(), correct: true });
-      } else if (line.startsWith('=')) {
-        answers.push({ text: line.slice(1).trim(), correct: false });
-      }
+  for (let line of lines) {
+    // если новая строка — вопрос (начинается с числа + точка)
+    const m = line.match(/^(\d+)\.\s*(.*)/);
+    if (m) {
+      if (current) questions.push(current);
+      current = { question: m[2], answers: [] };
+      continue;
     }
 
-    questions.push({ question: questionText, answers });
+    // правильный ответ
+    if (line.startsWith('-') && current) {
+      current.answers.push({ text: line.substring(1).trim(), correct: true });
+      continue;
+    }
+
+    // неправильный ответ
+    if (line.startsWith('=') && current) {
+      current.answers.push({ text: line.substring(1).trim(), correct: false });
+      continue;
+    }
   }
 
+  if (current) questions.push(current);
   return questions;
 }
 
@@ -65,23 +71,19 @@ function render(questions) {
   questions.forEach((q, qi) => {
     const div = document.createElement('div');
     div.className = 'question';
-
     const h = document.createElement('h4');
     h.textContent = `${qi + 1}. ${q.question}`;
     div.appendChild(h);
 
     const answersDiv = document.createElement('div');
     answersDiv.className = 'answers';
-
     q.answers.forEach((a, ai) => {
       const id = `q${qi}_a${ai}`;
       const label = document.createElement('label');
-
       const input = document.createElement('input');
       input.type = 'radio';
       input.name = `q${qi}`;
       input.value = ai;
-
       label.appendChild(input);
       label.append(' ' + a.text);
       answersDiv.appendChild(label);
@@ -95,17 +97,16 @@ function render(questions) {
 document.getElementById('check').addEventListener('click', () => {
   const questions = window.quizData;
   let score = 0;
-
   questions.forEach((q, qi) => {
     const checked = document.querySelector(`input[name="q${qi}"]:checked`);
     if (!checked) return;
     if (q.answers[checked.value].correct) score++;
   });
-
   document.getElementById('result').textContent =
     `Результат: ${score} из ${questions.length}`;
 });
 
+// загрузка
 loadQuestions().then(qs => {
   window.quizData = qs;
   render(qs);
